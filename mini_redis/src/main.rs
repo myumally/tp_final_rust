@@ -1,5 +1,13 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use tokio::net::TcpListener;
+use tokio::sync::Mutex;
+
+use mini_redis::client_handler::handle_client;
+
 #[tokio::main]
-async fn main() {
+async fn main() -> std::io::Result<()> {
     // Initialiser tracing
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -17,5 +25,25 @@ async fn main() {
     // 4. Dans chaque tâche : lire les requêtes JSON ligne par ligne,
     //    traiter la commande, envoyer la réponse JSON + '\n'
 
-    println!("MiniRedis - à implémenter !");
+    // Structure suggérée pour l'état partagé :
+    type Store = Arc<Mutex<HashMap<String, String>>>;
+    let store: Store = Arc::new(Mutex::new(HashMap::new()));
+
+    let listener = TcpListener::bind("127.0.0.1:7878").await?;
+
+    // Accept loop classique :
+    loop {
+        let (socket, addr) = listener.accept().await?;
+        let store = store.clone();
+        tokio::spawn(async move {
+            handle_client(socket, store).await;
+        });
+    }
+
+    // // Lecture ligne par ligne avec BufReader :
+    // use tokio::io::{AsyncBufReadExt, BufReader};
+    // let reader = BufReader::new(read_half);
+    // let mut line = String::new();
+    // reader.read_line(&mut line).await?;
+    // println!("MiniRedis - à implémenter !");
 }
