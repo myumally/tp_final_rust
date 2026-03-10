@@ -1,9 +1,12 @@
-
-use std::{collections::HashMap, sync::Arc};
-use tokio::{net::TcpStream, sync::Mutex, io::{AsyncBufReadExt, BufReader, AsyncWriteExt}};
 use serde_json::{self, json};
+use std::{collections::HashMap, sync::Arc};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    net::TcpStream,
+    sync::Mutex,
+};
 
-use crate::command::{Request, Response, del, get, ping, set};
+use crate::command::{del, expire, get, keys, ping, set, ttl, Request, Response};
 type Store = Arc<Mutex<HashMap<String, String>>>;
 
 pub async fn handle_client(socket: TcpStream, store: Store) {
@@ -14,7 +17,6 @@ pub async fn handle_client(socket: TcpStream, store: Store) {
     loop {
         line.clear();
         match reader.read_line(&mut line).await {
-
             Ok(0) => {
                 break;
             }
@@ -28,7 +30,10 @@ pub async fn handle_client(socket: TcpStream, store: Store) {
                             message: Some(format!("Invalid JSON: {}", e)),
                             ..Default::default()
                         };
-                        if let Err(e) = write_half.write_all((serde_json::to_string(&resp).unwrap()).as_bytes()).await {
+                        if let Err(e) = write_half
+                            .write_all((serde_json::to_string(&resp).unwrap()).as_bytes())
+                            .await
+                        {
                             eprintln!("Error writing to socket: {}", e);
                             break;
                         }
@@ -38,9 +43,19 @@ pub async fn handle_client(socket: TcpStream, store: Store) {
 
                 let result = match req.cmd.as_str() {
                     "PING" => ping().await,
-                    "SET" => set(req.key.unwrap_or_default().to_string(), req.value.unwrap_or_default(), store.clone()).await,
+                    "SET" => {
+                        set(
+                            req.key.unwrap_or_default().to_string(),
+                            req.value.unwrap_or_default(),
+                            store.clone(),
+                        )
+                        .await
+                    }
                     "GET" => get(req.key.unwrap_or_default().to_string(), store.clone()).await,
                     "DEL" => del(req.key.unwrap_or_default().to_string(), store.clone()).await,
+                    "KEYS" => keys(store.clone()).await,
+                    "EXPIRE" => expire(store.clone()).await,
+                    "TTL" => ttl(store.clone()).await,
                     _ => Ok(Response {
                         status: "error".to_string(),
                         message: Some("Unknown command".to_string()),

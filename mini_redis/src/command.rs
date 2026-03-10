@@ -1,26 +1,34 @@
-use std::{collections::HashMap};
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 type Store = Arc<Mutex<HashMap<String, String>>>;
 
+use std::time::Instant;
+
+// Vous pouvez stocker l'instant d'expiration avec la valeur :
+struct Entry {
+    value: String,
+    expires_at: Option<Instant>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Request{
+pub struct Request {
     pub cmd: String,
     pub key: Option<String>,
     pub value: Option<String>,
-    pub seconds: Option<i32>
+    pub seconds: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
-pub struct Response{
+pub struct Response {
     pub status: String,
     pub value: Option<String>,
     pub count: Option<i32>,
     pub keys: Option<Vec<String>>,
     pub ttl: Option<i32>,
-    pub message: Option<String>
+    pub message: Option<String>,
 }
 
 #[derive(Debug)]
@@ -65,6 +73,32 @@ pub async fn del(key: String, store: Store) -> Result<Response, CmdError> {
     Ok(Response {
         status: "ok".to_string(),
         count: Some(count),
+        ..Default::default()
+    })
+}
+
+pub async fn keys(store: Store) -> Result<Response, CmdError> {
+    let store = store.lock().await;
+    let keys: Vec<String> = store.keys().cloned().collect();
+    Ok(Response {
+        status: "ok".to_string(),
+        keys: Some(keys),
+        ..Default::default()
+    })
+}
+
+pub async fn expire(store: Store) -> Result<Response, CmdError> {
+    let mut store = store.lock().await;
+    Ok(Response {
+        status: "ok".to_string(),
+        ..Default::default()
+    })
+}
+
+pub async fn ttl(store: Store) -> Result<Response, CmdError> {
+    let store = store.lock().await;
+    Ok(Response {
+        status: "ok".to_string(),
         ..Default::default()
     })
 }
