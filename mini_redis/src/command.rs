@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 
 type Store = Arc<Mutex<HashMap<String, String>>>;
@@ -97,6 +99,101 @@ pub async fn expire(store: Store) -> Result<Response, CmdError> {
 
 pub async fn ttl(store: Store) -> Result<Response, CmdError> {
     let store = store.lock().await;
+    Ok(Response {
+        status: "ok".to_string(),
+        ..Default::default()
+    })
+}
+
+pub async fn incr(key: String, store: Store) -> Result<Response, CmdError> {
+    let mut store = store.lock().await;
+
+    if let Some(value) = store.get_mut(&key) {
+        let val: i64 = match value.parse() {
+            Ok(v) => v,
+            Err(_) => {
+                return Ok(Response {
+                    status: "error".to_string(),
+                    message: Some("not an integer".to_string()),
+                    ..Default::default()
+                });
+            }
+        };
+
+        let new_val = val + 1;
+        *value = new_val.to_string();
+
+        Ok(Response {
+            status: "ok".to_string(),
+            value: Some(new_val.to_string()),
+            ..Default::default()
+        })
+    } else {
+        store.insert(key, "1".to_string());
+
+        Ok(Response {
+            status: "ok".to_string(),
+            value: Some("1".to_string()),
+            ..Default::default()
+        })
+    }
+}
+
+pub async fn decr(key: String, store: Store) -> Result<Response, CmdError> {
+    let mut store = store.lock().await;
+
+    if let Some(value) = store.get_mut(&key) {
+        let val: i64 = match value.parse() {
+            Ok(v) => v,
+            Err(_) => {
+                return Ok(Response {
+                    status: "error".to_string(),
+                    message: Some("not an integer".to_string()),
+                    ..Default::default()
+                });
+            }
+        };
+
+        let new_val = val - 1;
+        *value = new_val.to_string();
+
+        Ok(Response {
+            status: "ok".to_string(),
+            value: Some(new_val.to_string()),
+            ..Default::default()
+        })
+    } else {
+        store.insert(key, "-1".to_string());
+
+        Ok(Response {
+            status: "ok".to_string(),
+            value: Some("-1".to_string()),
+            ..Default::default()
+        })
+    }
+}
+
+pub async fn save(store: Store) -> Result<Response, CmdError> {
+    let store = store.lock().await;
+
+    let json = match serde_json::to_string(&*store) {
+        Ok(j) => j,
+        Err(_) => {
+            return Ok(Response {
+                status: "error".to_string(),
+                message: Some("failed to serialize store".to_string()),
+                ..Default::default()
+            })
+        }
+    };
+
+    let mut file = File::create("dump.json")
+        .await
+        .expect("failed to create file");
+    file.write_all(json.as_bytes())
+        .await
+        .expect("failed to write file");
+
     Ok(Response {
         status: "ok".to_string(),
         ..Default::default()

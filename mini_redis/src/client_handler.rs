@@ -6,7 +6,7 @@ use tokio::{
     sync::Mutex,
 };
 
-use crate::command::{del, expire, get, keys, ping, set, ttl, Request, Response};
+use crate::command::{decr, del, expire, get, incr, keys, ping, save, set, ttl, Request, Response};
 type Store = Arc<Mutex<HashMap<String, String>>>;
 
 pub async fn handle_client(socket: TcpStream, store: Store) {
@@ -24,10 +24,10 @@ pub async fn handle_client(socket: TcpStream, store: Store) {
             Ok(_) => {
                 let req: Request = match serde_json::from_str(&line) {
                     Ok(req) => req,
-                    Err(e) => {
+                    Err(_) => {
                         let resp = Response {
                             status: "error".to_string(),
-                            message: Some(format!("Invalid JSON: {}", e)),
+                            message: Some("invalid json".to_string()),
                             ..Default::default()
                         };
                         if let Err(e) = write_half
@@ -56,9 +56,12 @@ pub async fn handle_client(socket: TcpStream, store: Store) {
                     "KEYS" => keys(store.clone()).await,
                     "EXPIRE" => expire(store.clone()).await,
                     "TTL" => ttl(store.clone()).await,
+                    "INCR" => incr(req.key.unwrap_or_default().to_string(), store.clone()).await,
+                    "DECR" => decr(req.key.unwrap_or_default().to_string(), store.clone()).await,
+                    "SAVE" => save(store.clone()).await,
                     _ => Ok(Response {
                         status: "error".to_string(),
-                        message: Some("Unknown command".to_string()),
+                        message: Some("unknown command".to_string()),
                         ..Default::default()
                     }),
                 };
@@ -67,7 +70,7 @@ pub async fn handle_client(socket: TcpStream, store: Store) {
                     Ok(r) => r,
                     Err(_) => Response {
                         status: "error".to_string(),
-                        message: Some("Unknown error".to_string()),
+                        message: Some("unknown error".to_string()),
                         ..Default::default()
                     },
                 };
